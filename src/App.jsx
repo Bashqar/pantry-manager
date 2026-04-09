@@ -53,34 +53,38 @@ const Badge = ({ children, color = "gray" }) => {
 const statusColor = (s) => ({ "Not Opened": "blue", "Opened": "green", "Finished": "gray", "Expired": "red" }[s] || "gray");
 
 // ==========================================
-// API Layer — talks to your Apps Script
+// API Layer — CORS-safe via GET params
+// Google Apps Script blocks cross-origin POST
+// so we pass everything as GET query params
 // ==========================================
 const createApi = () => {
   let url = null;
+
+  const call = async (params) => {
+    if (!url) return null;
+    const qs = new URLSearchParams(params).toString();
+    const res = await fetch(`${url}?${qs}`, { redirect: "follow" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { throw new Error("Invalid response: " + text.substring(0, 200)); }
+  };
+
   return {
     setUrl(u) { url = u; },
     getUrl() { return url; },
     async fetchItems() {
-      if (!url) return null;
-      const res = await fetch(`${url}?action=list`);
-      const data = await res.json();
-      if (data.success) return data.items;
-      throw new Error(data.error || "Failed to fetch");
+      const data = await call({ action: "list" });
+      if (data?.success) return data.items;
+      throw new Error(data?.error || "Failed to fetch");
     },
     async addItem(item) {
-      if (!url) return null;
-      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add", item }) });
-      return res.json();
+      return call({ action: "add", data: JSON.stringify(item) });
     },
     async updateItem(item) {
-      if (!url) return null;
-      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update", item }) });
-      return res.json();
+      return call({ action: "update", data: JSON.stringify(item) });
     },
     async deleteItem(id) {
-      if (!url) return null;
-      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", id }) });
-      return res.json();
+      return call({ action: "delete", data: JSON.stringify({ id }) });
     },
   };
 };
